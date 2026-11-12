@@ -1153,3 +1153,442 @@ class CommentsViewModel : ViewModel() {
     }
 }
 
+// ============================================================
+// 4. MAIN ACTIVITY & NAVIGATION
+// ============================================================
+
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
+        setContent {
+            FindoraTheme {
+                AppNavigator()
+            }
+        }
+    }
+}
+
+@Composable
+fun AppNavigator() {
+    val authViewModel: AuthViewModel = viewModel()
+    val currentUser by authViewModel.currentUser.collectAsState()
+    val isCheckingAuth by authViewModel.isCheckingAuth.collectAsState()
+
+    var currentScreen by remember { mutableStateOf(Screen.Login) }
+    var isDrawerOpen by remember { mutableStateOf(false) }
+    var chatDestination by remember { mutableStateOf<ChatDestination?>(null) }
+    var selectedPost by remember { mutableStateOf<LostFoundPost?>(null) }
+
+    val context = LocalContext.current
+
+    LaunchedEffect(currentUser?.uid) {
+        chatDestination = null
+        selectedPost = null
+        currentScreen = if (currentUser != null) Screen.Home else Screen.Login
+        isDrawerOpen = false
+    }
+
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        if (isCheckingAuth) {
+            // ---- Branded animated splash ----
+            val pulse = rememberInfiniteTransition(label = "splashPulse")
+            val logoScale by pulse.animateFloat(
+                initialValue = 0.94f,
+                targetValue = 1.06f,
+                animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+                label = "logoScale"
+            )
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(animatedBrandGradient(vertical = true)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(
+                        modifier = Modifier
+                            .size(110.dp)
+                            .scale(logoScale)
+                            .shadow(24.dp, CircleShape, spotColor = Color.Black.copy(alpha = 0.4f))
+                            .clip(CircleShape)
+                            .background(Color.White)
+                            .padding(6.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.findoralogo),
+                            contentDescription = "Findora",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize().clip(CircleShape)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(30.dp))
+                    CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp)
+                    Spacer(modifier = Modifier.height(18.dp))
+                    Text("Findora", color = Color.White, fontWeight = FontWeight.Black, fontSize = 22.sp)
+                }
+            }
+        } else {
+            val user = currentUser
+            if (user == null) {
+                // ---------- AUTH SCREENS ----------
+                Crossfade(targetState = currentScreen, animationSpec = tween(250), label = "auth") { screen ->
+                    when (screen) {
+                        Screen.SignUp -> SignUpScreen(
+                            authViewModel = authViewModel,
+                            onBackClick = { currentScreen = Screen.Login }
+                        )
+                        Screen.ForgotPassword -> ForgotPasswordScreen(
+                            authViewModel = authViewModel,
+                            onBackClick = { currentScreen = Screen.Login }
+                        )
+                        else -> LoginScreen(
+                            authViewModel = authViewModel,
+                            onSignUpClick = { currentScreen = Screen.SignUp },
+                            onForgotPasswordClick = { currentScreen = Screen.ForgotPassword }
+                        )
+                    }
+                }
+            } else {
+                // ---------- LOGGED-IN ----------
+                val feedViewModel: FeedViewModel = viewModel(key = "feed_${user.uid}")
+                val messagesViewModel: MessagesViewModel = viewModel(key = "messages_${user.uid}")
+                val chatViewModel: ChatViewModel = viewModel(key = "chat_${user.uid}")
+                val commentsViewModel: CommentsViewModel = viewModel(key = "comments_${user.uid}")
+
+                val posts by feedViewModel.posts.collectAsState()
+                val conversations by messagesViewModel.conversations.collectAsState()
+                val feedError by feedViewModel.feedError.collectAsState()
+                val isRefreshing by feedViewModel.isRefreshing.collectAsState()
+                val totalUnread = conversations.sumOf { it.unreadFor(user.uid) }
+
+                val myPosts = posts.filter { it.userId == user.uid }
+                val showBottomBar = currentScreen == Screen.Home ||
+                        currentScreen == Screen.Messages || currentScreen == Screen.Profile
+
+                Column(modifier = Modifier.fillMaxSize()) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        Crossfade(targetState = currentScreen, animationSpec = tween(260), label = "screens") { screen ->
+                            when (screen) {
+                                Screen.Messages -> MessageScreen(
+                                    viewModel = messagesViewModel,
+                                    onBackClick = { currentScreen = Screen.Home },
+                                    onOpenChat = { conversation ->
+                                        messagesViewModel.markChatRead(conversation.id)
+                                        chatDestination = ChatDestination(
+                                            chatId = conversation.id,
+                                            otherUserId = conversation.otherUserId(user.uid),
+                                            otherUserName = conversation.otherUserName(user.uid)
+                                        )
+                                        currentScreen = Screen.Chat
+                                    }
+                                )
+                                Screen.Chat -> ChatScreen(
+                                    destination = chatDestination,
+                                    viewModel = chatViewModel,
+                                    onBackClick = { currentScreen = Screen.Messages }
+                                )
+                                Screen.CreatePost -> CreatePostScreen(
+                                    viewModel = feedViewModel,
+                                    currentUser = user,
+                                    onBackClick = { currentScreen = Screen.Home },
+                                    onPostCreated = { currentScreen = Screen.Home }
+                                )
+                                Screen.Comments -> CommentsScreen(
+                                    post = selectedPost,
+                                    viewModel = commentsViewModel,
+                                    user = user,
+                                    onBackClick = { currentScreen = Screen.Home }
+                                )
+                                Screen.Profile -> ProfileScreen(
+                                    user = user,
+                                    myPosts = myPosts,
+                                    onMarkGiven = { post, claimName ->
+                                        feedViewModel.markPostGiven(post, claimName)
+                                    },
+                                    onDeletePost = { post -> feedViewModel.deletePost(post) },
+                                    onMenuClick = { isDrawerOpen = true },
+                                    onBackClick = { currentScreen = Screen.Home }
+                                )
+                                else -> HomeScreen(
+                                    posts = posts,
+                                    userName = user.name,
+                                    myUid = user.uid,
+                                    feedError = feedError,
+                                    isRefreshing = isRefreshing,
+                                    onRefresh = { feedViewModel.refresh() },
+                                    onUserMessageClick = { post ->
+                                        messagesViewModel.startChatWith(
+                                            otherUid = post.userId,
+                                            otherName = post.username,
+                                            myName = user.name,
+                                            onReady = { chatId, otherName ->
+                                                chatDestination = ChatDestination(chatId, post.userId, otherName)
+                                                currentScreen = Screen.Chat
+                                            },
+                                            onError = { msg ->
+                                                Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                            }
+                                        )
+                                    },
+                                    onLikeClick = { post -> feedViewModel.toggleLike(post, user.uid) },
+                                    onCommentClick = { post ->
+                                        selectedPost = post
+                                        currentScreen = Screen.Comments
+                                    },
+                                    onDeletePost = { post -> feedViewModel.deletePost(post) },
+                                    onAddPostClick = { currentScreen = Screen.CreatePost },
+                                    onMenuClick = { isDrawerOpen = true }
+                                )
+                            }
+                        }
+                    }
+
+                    // ---- Floating pill bottom navigation ----
+                    AnimatedVisibility(
+                        visible = showBottomBar,
+                        enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                        exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+                    ) {
+                        FindoraBottomBar(
+                            current = currentScreen,
+                            unreadCount = totalUnread,
+                            onHome = { currentScreen = Screen.Home },
+                            onMessages = { currentScreen = Screen.Messages },
+                            onProfile = { currentScreen = Screen.Profile }
+                        )
+                    }
+                }
+            }
+        }
+
+        // ---------- Drawer scrim ----------
+        AnimatedVisibility(
+            visible = isDrawerOpen,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .clickable { isDrawerOpen = false }
+            )
+        }
+
+        // ---------- Drawer ----------
+        AnimatedVisibility(
+            visible = isDrawerOpen,
+            enter = slideInHorizontally(initialOffsetX = { it }),
+            exit = slideOutHorizontally(targetOffsetX = { it }),
+            modifier = Modifier.align(Alignment.CenterEnd)
+        ) {
+            RightDrawerUI(
+                user = currentUser,
+                onHomeClick = { isDrawerOpen = false; currentScreen = Screen.Home },
+                onProfileClick = { isDrawerOpen = false; currentScreen = Screen.Profile },
+                onLogoutClick = { isDrawerOpen = false; authViewModel.logout() }
+            )
+        }
+    }
+}
+
+// Floating pill bottom bar with animated selection
+@Composable
+fun FindoraBottomBar(
+    current: Screen,
+    unreadCount: Int,
+    onHome: () -> Unit,
+    onMessages: () -> Unit,
+    onProfile: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 10.dp),
+        shape = RoundedCornerShape(26.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shadowElevation = 14.dp,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            BottomNavItem(Icons.Default.Home, "Home", current == Screen.Home, onClick = onHome)
+            BottomNavItem(Icons.Default.Email, "Chats", current == Screen.Messages, badge = unreadCount, onClick = onMessages)
+            BottomNavItem(Icons.Default.Person, "Profile", current == Screen.Profile, onClick = onProfile)
+        }
+    }
+}
+
+@Composable
+fun BottomNavItem(
+    icon: ImageVector,
+    label: String,
+    selected: Boolean,
+    badge: Int = 0,
+    onClick: () -> Unit
+) {
+    val tint by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = tween(250),
+        label = "navTint"
+    )
+    val scale by animateFloatAsState(
+        targetValue = if (selected) 1.15f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label = "navScale"
+    )
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 4.dp)
+    ) {
+        Box {
+            Icon(icon, contentDescription = label, tint = tint, modifier = Modifier.size(25.dp).scale(scale))
+            if (badge > 0) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .offset(x = 7.dp, y = (-3).dp)
+                        .size(18.dp)
+                        .clip(CircleShape)
+                        .background(BrandPinkDeep),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        badge.toString(),
+                        color = Color.White,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+        }
+        Text(
+            label,
+            color = tint,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+        )
+    }
+}
+
+// ============================================================
+// 5. DRAWER (animated pink gradient header)
+// ============================================================
+
+@Composable
+fun RightDrawerUI(
+    user: UserData?,
+    onHomeClick: () -> Unit,
+    onProfileClick: () -> Unit,
+    onLogoutClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxHeight()
+            .width(310.dp),
+        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(topStart = 28.dp, bottomStart = 28.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(animatedBrandGradient(vertical = true))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .statusBarsPadding()
+                        .padding(20.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.25f))
+                            .padding(5.dp)
+                    ) {
+                        GradientAvatar(user?.name ?: "G", 46.dp, MaterialTheme.typography.titleMedium)
+                    }
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column {
+                        Text(
+                            text = user?.name ?: "Guest User",
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            text = user?.email ?: "Not logged in",
+                            color = Color.White.copy(alpha = 0.85f),
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            DrawerItem(icon = Icons.Default.Home, text = "Home", onClick = onHomeClick)
+            DrawerItem(icon = Icons.Default.Person, text = "Profile", onClick = onProfileClick)
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            DrawerItem(
+                icon = Icons.Default.Logout,
+                text = "Logout",
+                tint = MaterialTheme.colorScheme.error,
+                containerTint = MaterialTheme.colorScheme.error.copy(alpha = 0.10f),
+                onClick = onLogoutClick
+            )
+            Text(
+                "Findora • v2.0",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+            )
+            Spacer(modifier = Modifier.navigationBarsPadding())
+        }
+    }
+}
+
+@Composable
+fun DrawerItem(
+    icon: ImageVector,
+    text: String,
+    tint: Color = MaterialTheme.colorScheme.primary,
+    containerTint: Color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 5.dp)
+            .clip(RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(containerTint),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = text, tint = tint, modifier = Modifier.size(20.dp))
+        }
+        Spacer(modifier = Modifier.width(14.dp))
+        Text(text, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyLarge)
+    }
+}
+
