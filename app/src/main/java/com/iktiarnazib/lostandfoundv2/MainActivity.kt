@@ -2043,3 +2043,248 @@ fun SignUpScreen(authViewModel: AuthViewModel, onBackClick: () -> Unit) {
     }
 }
 
+// ============================================================
+// 9. HOME FEED (hero header, filter chips, modern cards)
+// ============================================================
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun HomeScreen(
+    posts: List<LostFoundPost>,
+    userName: String,
+    myUid: String,
+    feedError: String?,
+    isRefreshing: Boolean,
+    onRefresh: () -> Unit,
+    onUserMessageClick: (LostFoundPost) -> Unit,
+    onLikeClick: (LostFoundPost) -> Unit,
+    onCommentClick: (LostFoundPost) -> Unit,
+    onDeletePost: (LostFoundPost) -> Unit,
+    onAddPostClick: () -> Unit,
+    onMenuClick: () -> Unit
+) {
+    var searchQuery by remember { mutableStateOf("") }
+    var selectedFilter by remember { mutableStateOf("All") } // All, Lost, Found, Given
+
+    val lostCount = posts.count { it.status.equals("Lost", true) }
+    val foundCount = posts.count { it.status.equals("Found", true) }
+    val givenCount = posts.count { it.status.equals("Given", true) }
+
+    val filteredPosts = remember(searchQuery, posts, selectedFilter) {
+        posts.filter { post ->
+            (selectedFilter == "All" || post.status.equals(selectedFilter, ignoreCase = true)) &&
+                    (searchQuery.isBlank() ||
+                            post.title.contains(searchQuery, ignoreCase = true) ||
+                            post.description.contains(searchQuery, ignoreCase = true) ||
+                            post.location.contains(searchQuery, ignoreCase = true) ||
+                            post.username.contains(searchQuery, ignoreCase = true) ||
+                            post.status.contains(searchQuery, ignoreCase = true))
+        }
+    }
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.findoralogo),
+                    contentDescription = "App Logo",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(42.dp)
+                        .shadow(6.dp, CircleShape, spotColor = BrandPinkDeep)
+                        .clip(CircleShape)
+                )
+                Spacer(modifier = Modifier.width(12.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Findora",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        "Hi, ${userName.split(" ").firstOrNull() ?: "there"} 👋",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                IconButton(onClick = onRefresh, enabled = !isRefreshing) {
+                    if (isRefreshing) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                    }
+                }
+                IconButton(onClick = onMenuClick) {
+                    Icon(Icons.Default.Menu, contentDescription = "Menu")
+                }
+            }
+        },
+        floatingActionButton = {
+            Box(
+                modifier = Modifier
+                    .size(58.dp)
+                    .shadow(10.dp, CircleShape, spotColor = BrandPinkDeep)
+                    .clip(CircleShape)
+                    .background(BrandGradient)
+                    .clickable(onClick = onAddPostClick),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.Add, contentDescription = "Add Post", tint = Color.White, modifier = Modifier.size(28.dp))
+            }
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                placeholder = { Text("Search lost & found items...") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear Search")
+                        }
+                    }
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(20.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = Color.Transparent,
+                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface
+                )
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterPill("All", Icons.Default.Apps, MaterialTheme.colorScheme.primary, posts.size, selectedFilter) { selectedFilter = "All" }
+                FilterPill("Lost", Icons.Default.SearchOff, statusColor("Lost"), lostCount, selectedFilter) { selectedFilter = "Lost" }
+                FilterPill("Found", Icons.Default.CheckCircle, statusColor("Found"), foundCount, selectedFilter) { selectedFilter = "Found" }
+                FilterPill("Given", Icons.Default.TaskAlt, statusColor("Given"), givenCount, selectedFilter) { selectedFilter = "Given" }
+            }
+
+            feedError?.let { ErrorBanner(it) }
+
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                if (filteredPosts.isEmpty()) {
+                    item {
+                        EmptyState(
+                            icon = if (searchQuery.isBlank()) Icons.Default.AutoAwesome else Icons.Default.Search,
+                            title = if (searchQuery.isBlank()) "Nothing here yet" else "No results",
+                            subtitle = if (searchQuery.isBlank())
+                                "Be the first to post a lost or found item. Tap the + button!"
+                            else "Try a different keyword or switch the filter."
+                        )
+                    }
+                } else {
+                    items(filteredPosts, key = { it.id }) { post ->
+                        PostCard(
+                            post = post,
+                            myUid = myUid,
+                            onMessageUser = onUserMessageClick,
+                            onLikeClick = onLikeClick,
+                            onCommentClick = onCommentClick,
+                            onDeletePost = onDeletePost
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Version-safe FilterChip colors (works with all M3 versions)
+@Composable
+fun FilterPill(
+    label: String,
+    icon: ImageVector,
+    color: Color,
+    count: Int,
+    selected: String,
+    onSelect: () -> Unit
+) {
+    val isSelected = selected == label
+    FilterChip(
+        selected = isSelected,
+        onClick = onSelect,
+        leadingIcon = { Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp)) },
+        label = {
+            Text(
+                "$label ($count)",
+                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+            )
+        },
+        shape = RoundedCornerShape(14.dp),
+        colors = FilterChipDefaults.filterChipColors(
+            containerColor = MaterialTheme.colorScheme.surface,
+            labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            iconColor = color,
+            selectedContainerColor = color,
+            selectedLabelColor = Color.White,
+            selectedLeadingIconColor = Color.White
+        )
+    )
+}
+
+// ============================================================
+// 10. AUTHOR PROFILE HELPERS
+// ============================================================
+
+@Composable
+fun rememberAuthorProfile(userId: String): UserData? {
+    var author by remember(userId) { mutableStateOf<UserData?>(null) }
+    LaunchedEffect(userId) {
+        if (userId.isBlank()) return@LaunchedEffect
+        try {
+            val snap = FirebaseFirestore.getInstance()
+                .collection("users").document(userId).get().await()
+            author = snap.toObject(UserData::class.java)
+        } catch (_: Exception) { }
+    }
+    return author
+}
+
+@Composable
+fun AuthorInfoChip(text: String) {
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f))
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Medium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
