@@ -2688,3 +2688,463 @@ fun PostInteraction(
     }
 }
 
+// ============================================================
+// 12. MESSAGES SCREEN
+// ============================================================
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MessageScreen(
+    viewModel: MessagesViewModel,
+    onBackClick: () -> Unit,
+    onOpenChat: (Conversation) -> Unit
+) {
+    val conversations by viewModel.conversations.collectAsState()
+    val error by viewModel.error.collectAsState()
+    val myUid = viewModel.myUid
+
+    LaunchedEffect(Unit) { viewModel.retryIfNeeded() }
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopAppBar(
+                title = { Text("Messages", fontWeight = FontWeight.Black) },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    titleContentColor = MaterialTheme.colorScheme.primary
+                )
+            )
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            error?.let {
+                ErrorBanner(it)
+                TextButton(
+                    onClick = { viewModel.retry() },
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                ) { Text("Retry") }
+            }
+            if (conversations.isEmpty()) {
+                EmptyState(
+                    icon = Icons.Default.Chat,
+                    title = "No conversations yet",
+                    subtitle = "Tap the send icon on a post to start a private chat with its owner!"
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(conversations, key = { it.id }) { conversation ->
+                        ConversationItem(conversation, myUid) { onOpenChat(conversation) }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun ConversationItem(conversation: Conversation, myUid: String, onClick: () -> Unit) {
+    val otherName = conversation.otherUserName(myUid)
+    val unread = conversation.unreadFor(myUid)
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = if (unread > 0) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)) else null,
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            GradientAvatar(otherName, 50.dp)
+            Spacer(modifier = Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = otherName,
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                    Text(
+                        text = conversation.lastMessageTime.timeAgo(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Spacer(modifier = Modifier.height(3.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = conversation.lastMessage.ifBlank { "Say hello! 👋" },
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = if (unread > 0) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (unread > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
+                    )
+                    if (unread > 0) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clip(CircleShape)
+                                .background(BrandGradient),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = unread.toString(),
+                                color = Color.White,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ============================================================
+// 13. CHAT SCREEN (pink gradient bubbles, pulsing presence)
+// ============================================================
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ChatScreen(destination: ChatDestination?, viewModel: ChatViewModel, onBackClick: () -> Unit) {
+    var messageText by remember { mutableStateOf("") }
+    val listState = rememberLazyListState()
+    val messages by viewModel.messages.collectAsState()
+    val myUid = viewModel.myUid
+
+    val sendError by viewModel.sendError.collectAsState()
+    val loadError by viewModel.loadError.collectAsState()
+    val context = LocalContext.current
+
+    LaunchedEffect(sendError) {
+        sendError?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            viewModel.clearError()
+        }
+    }
+
+    LaunchedEffect(destination?.chatId) {
+        destination?.let { viewModel.initChat(it.chatId, it.otherUserId) }
+    }
+
+    LaunchedEffect(messages.size) {
+        if (messages.isNotEmpty()) {
+            listState.animateScrollToItem(messages.size - 1)
+        }
+    }
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        GradientAvatar(destination?.otherUserName ?: "U", 36.dp, MaterialTheme.typography.bodyMedium)
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text(destination?.otherUserName ?: "Chat", fontWeight = FontWeight.Bold)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                PulsingDot(statusColor("Given"))
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text(
+                                    "Active now",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = statusColor("Given")
+                                )
+                            }
+                        }
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back to Messages")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                )
+            )
+        },
+        bottomBar = {
+            Surface(tonalElevation = 4.dp, color = MaterialTheme.colorScheme.surface) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = messageText,
+                        onValueChange = { messageText = it },
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("Message...") },
+                        shape = RoundedCornerShape(24.dp),
+                        maxLines = 4,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color.Transparent,
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedContainerColor = MaterialTheme.colorScheme.background,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.background,
+                            cursorColor = MaterialTheme.colorScheme.primary
+                        )
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    GradientCircleButton(
+                        icon = Icons.Default.Send,
+                        contentDescription = "Send Message",
+                        enabled = messageText.isNotBlank()
+                    ) {
+                        viewModel.sendMessage(messageText)
+                        messageText = ""
+                    }
+                }
+            }
+        }
+    ) { paddingValues ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues),
+            state = listState,
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            if (messages.isEmpty()) {
+                item {
+                    if (loadError != null) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(top = 48.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            ErrorBanner(loadError ?: "")
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Button(onClick = { viewModel.retryLoad() }) { Text("Retry") }
+                        }
+                    } else {
+                        EmptyState(
+                            icon = Icons.Default.Chat,
+                            title = "Say hi! 👋",
+                            subtitle = "This is the beginning of your conversation with ${destination?.otherUserName ?: "them"}."
+                        )
+                    }
+                }
+            }
+            items(messages, key = { it.id }) { msg ->
+                ChatBubble(
+                    text = msg.text,
+                    isSentByMe = msg.senderId == myUid,
+                    time = msg.createdAt.toChatTime()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun ChatBubble(text: String, isSentByMe: Boolean, time: String) {
+    val alignment = if (isSentByMe) Alignment.End else Alignment.Start
+    val bubbleShape = if (isSentByMe)
+        RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 20.dp, bottomEnd = 6.dp)
+    else
+        RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 6.dp, bottomEnd = 20.dp)
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = alignment
+    ) {
+        Box(
+            modifier = Modifier
+                .clip(bubbleShape)
+                .then(
+                    if (isSentByMe) Modifier.background(BrandGradient)
+                    else Modifier.background(MaterialTheme.colorScheme.surfaceVariant)
+                )
+                .padding(horizontal = 14.dp, vertical = 10.dp)
+                .widthIn(max = 280.dp)
+        ) {
+            Text(
+                text = text,
+                color = if (isSentByMe) Color.White else MaterialTheme.colorScheme.onSurface,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+        Text(
+            text = time,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp, start = 6.dp, end = 6.dp)
+        )
+    }
+}
+
+// ============================================================
+// 14. COMMENTS SCREEN
+// ============================================================
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun CommentsScreen(
+    post: LostFoundPost?,
+    viewModel: CommentsViewModel,
+    user: UserData?,
+    onBackClick: () -> Unit
+) {
+    var commentText by remember { mutableStateOf("") }
+    val comments by viewModel.comments.collectAsState()
+    val error by viewModel.error.collectAsState()
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(post?.id) { post?.let { viewModel.initPost(it.id) } }
+
+    LaunchedEffect(comments.size) {
+        if (comments.isNotEmpty()) listState.animateScrollToItem(comments.size - 1)
+    }
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text("Comments", fontWeight = FontWeight.Black)
+                        Text(
+                            post?.title ?: "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
+                        Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    titleContentColor = MaterialTheme.colorScheme.primary
+                )
+            )
+        },
+        bottomBar = {
+            Surface(tonalElevation = 4.dp, color = MaterialTheme.colorScheme.surface) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    OutlinedTextField(
+                        value = commentText,
+                        onValueChange = { commentText = it },
+                        modifier = Modifier.weight(1f),
+                        placeholder = { Text("Add a comment...") },
+                        shape = RoundedCornerShape(24.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Color.Transparent,
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedContainerColor = MaterialTheme.colorScheme.background,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.background,
+                            cursorColor = MaterialTheme.colorScheme.primary
+                        )
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    GradientCircleButton(
+                        icon = Icons.Default.Send,
+                        contentDescription = "Send Comment",
+                        enabled = commentText.isNotBlank()
+                    ) {
+                        post?.let {
+                            viewModel.addComment(it.id, commentText, user)
+                            commentText = ""
+                        }
+                    }
+                }
+            }
+        }
+    ) { paddingValues ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(paddingValues)
+        ) {
+            error?.let { ErrorBanner(it) }
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                state = listState,
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                if (comments.isEmpty()) {
+                    item {
+                        EmptyState(
+                            icon = Icons.Default.Comment,
+                            title = "No comments yet",
+                            subtitle = "Be the first to share something helpful!"
+                        )
+                    }
+                }
+                items(comments, key = { it.id }) { comment ->
+                    CommentItem(comment)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun CommentItem(comment: Comment) {
+    Row(verticalAlignment = Alignment.Top) {
+        GradientAvatar(comment.authorName, 36.dp, MaterialTheme.typography.bodyMedium)
+        Spacer(modifier = Modifier.width(12.dp))
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = comment.authorName,
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = comment.createdAt.timeAgo(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Text(
+                text = comment.text,
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+    }
+}
+
