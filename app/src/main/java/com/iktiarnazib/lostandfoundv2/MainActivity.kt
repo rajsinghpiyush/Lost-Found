@@ -135,7 +135,7 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 
 // ============================================================
-// 1. DATA MODELS & HELPERS  (unchanged logic)
+// 1. DATA MODELS & HELPERS
 // ============================================================
 
 data class UserData(
@@ -233,7 +233,7 @@ fun Timestamp?.toChatTime(): String =
     this?.let { SimpleDateFormat("hh:mm a", Locale.getDefault()).format(it.toDate()) } ?: ""
 
 // ============================================================
-// 1b. IMAGE HELPERS (unchanged logic)
+// 1b. IMAGE HELPERS
 // ============================================================
 
 @Composable
@@ -574,7 +574,7 @@ fun PulsingDot(color: Color) {
 }
 
 // ============================================================
-// 2. REPOSITORIES (unchanged)
+// 2. REPOSITORIES
 // ============================================================
 
 class AuthRepository {
@@ -804,7 +804,7 @@ class ChatRepository {
 }
 
 // ============================================================
-// 3. VIEWMODELS (unchanged)
+// 3. VIEWMODELS
 // ============================================================
 
 class AuthViewModel : ViewModel() {
