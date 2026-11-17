@@ -1,4 +1,4 @@
-# Lost & Found (Findora) 🔍📱
+# Lost & Found (Findly) 🔍📱
 
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.2.10-blue.svg)](https://kotlinlang.org)
 [![Platform](https://img.shields.io/badge/Platform-Android-green.svg)](https://developer.android.com)

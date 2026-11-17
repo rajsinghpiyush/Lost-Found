@@ -22,6 +22,6 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Lost and Found V2"
+rootProject.name = "Findly"
 include(":app")
  

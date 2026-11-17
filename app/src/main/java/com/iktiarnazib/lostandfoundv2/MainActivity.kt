@@ -310,10 +310,10 @@ suspend fun encodeImageToBase64(context: Context, uri: Uri): ImageEncodeResult =
     }
 
 // ============================================================
-// 1c. FINDORA THEME (logo pink palette) + SHARED UI COMPONENTS
+// 1c. FINDLY THEME (logo pink palette) + SHARED UI COMPONENTS
 // ============================================================
 
-// ---- Brand palette, matched to the Findora logo ----
+// ---- Brand palette, matched to the Findly logo ----
 val BrandPinkDeep = Color(0xFFE0246E)   // deep hot pink (logo shadow pink)
 val BrandPink = Color(0xFFF43F7F)       // the logo's main pink
 val BrandPinkLight = Color(0xFFFF7FAE)  // soft pink highlight
@@ -342,7 +342,7 @@ fun animatedBrandGradient(vertical: Boolean = false): Brush {
     else Brush.linearGradient(listOf(c1, c2))
 }
 
-private val FindoraLight = lightColorScheme(
+private val FindlyLight = lightColorScheme(
     primary = BrandPinkDeep,
     onPrimary = Color.White,
     primaryContainer = BrandPinkSoft,
@@ -363,7 +363,7 @@ private val FindoraLight = lightColorScheme(
     errorContainer = Color(0xFFFFE4E4)
 )
 
-private val FindoraDark = darkColorScheme(
+private val FindlyDark = darkColorScheme(
     primary = Color(0xFFFF8AB4),
     onPrimary = Color(0xFF5C0A2E),
     primaryContainer = Color(0xFF8C1B4B),
@@ -385,9 +385,9 @@ private val FindoraDark = darkColorScheme(
 )
 
 @Composable
-fun FindoraTheme(content: @Composable () -> Unit) {
+fun FindlyTheme(content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = if (isSystemInDarkTheme()) FindoraDark else FindoraLight,
+        colorScheme = if (isSystemInDarkTheme()) FindlyDark else FindlyLight,
         content = content
     )
 }
@@ -1162,7 +1162,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-            FindoraTheme {
+            FindlyTheme {
                 AppNavigator()
             }
         }
@@ -1216,8 +1216,8 @@ fun AppNavigator() {
                             .padding(6.dp)
                     ) {
                         Image(
-                            painter = painterResource(id = R.drawable.findoralogo),
-                            contentDescription = "Findora",
+                            painter = painterResource(id = R.drawable.findlylogo),
+                            contentDescription = "Findly",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize().clip(CircleShape)
                         )
@@ -1225,7 +1225,7 @@ fun AppNavigator() {
                     Spacer(modifier = Modifier.height(30.dp))
                     CircularProgressIndicator(color = Color.White, strokeWidth = 3.dp)
                     Spacer(modifier = Modifier.height(18.dp))
-                    Text("Findora", color = Color.White, fontWeight = FontWeight.Black, fontSize = 22.sp)
+                    Text("Findly", color = Color.White, fontWeight = FontWeight.Black, fontSize = 22.sp)
                 }
             }
         } else {
@@ -1350,7 +1350,7 @@ fun AppNavigator() {
                         enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                         exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
                     ) {
-                        FindoraBottomBar(
+                        FindlyBottomBar(
                             current = currentScreen,
                             unreadCount = totalUnread,
                             onHome = { currentScreen = Screen.Home },
@@ -1396,7 +1396,7 @@ fun AppNavigator() {
 
 // Floating pill bottom bar with animated selection
 @Composable
-fun FindoraBottomBar(
+fun FindlyBottomBar(
     current: Screen,
     unreadCount: Int,
     onHome: () -> Unit,
@@ -1550,7 +1550,7 @@ fun RightDrawerUI(
                 onClick = onLogoutClick
             )
             Text(
-                "Findora • v2.0",
+                "Findly • v2.0",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -1643,15 +1643,15 @@ fun LoginScreen(authViewModel: AuthViewModel, onSignUpClick: () -> Unit, onForgo
                         .padding(5.dp)
                 ) {
                     Image(
-                        painter = painterResource(id = R.drawable.findoralogo),
-                        contentDescription = "Findora Logo",
+                        painter = painterResource(id = R.drawable.findlylogo),
+                        contentDescription = "Findly Logo",
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize().clip(CircleShape)
                     )
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 Text(
-                    "Findora",
+                    "Findly",
                     style = MaterialTheme.typography.displaySmall,
                     fontWeight = FontWeight.Black,
                     color = Color.White
@@ -2093,7 +2093,7 @@ fun HomeScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Image(
-                    painter = painterResource(id = R.drawable.findoralogo),
+                    painter = painterResource(id = R.drawable.findlylogo),
                     contentDescription = "App Logo",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier
@@ -2104,7 +2104,7 @@ fun HomeScreen(
                 Spacer(modifier = Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        "Findora",
+                        "Findly",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Black,
                         color = MaterialTheme.colorScheme.primary
@@ -2641,7 +2641,7 @@ fun PostCard(
                             if (post.claimedByName.isNotBlank()) {
                                 append("✅ Given to ${post.claimedByName}\n")
                             }
-                            append("— shared from Findora")
+                            append("— shared from Findly")
                         }
                         val sendIntent = Intent(Intent.ACTION_SEND).apply {
                             type = "text/plain"
