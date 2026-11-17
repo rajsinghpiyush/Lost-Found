@@ -1,4 +1,4 @@
-package com.iktiarnazib.lostandfoundv2.ui.theme
+package com.android_ca3.lostandfoundv2.ui.theme
 
 import android.app.Activity
 import android.os.Build

@@ -79,7 +79,7 @@ Lost-Found/
 ├── app/
 │   ├── src/
 │   │   ├── main/
-│   │   │   ├── java/com/iktiarnazib/lostandfoundv2/
+│   │   │   ├── java/com/android_ca3/lostandfoundv2/
 │   │   │   │   ├── MainActivity.kt        # App navigator, ViewModels, screen composables & logic
 │   │   │   │   └── ui/theme/              # Material 3 colors, typography, theme definition
 │   │   │   ├── res/                       # Drawables, mipmaps, XML strings & app themes

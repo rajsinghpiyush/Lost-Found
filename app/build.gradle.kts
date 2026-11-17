@@ -5,13 +5,13 @@ plugins {
 }
 
 android {
-    namespace = "com.iktiarnazib.lostandfoundv2"
+    namespace = "com.android_ca3.lostandfoundv2"
     compileSdk {
         version = release(37)
     }
 
     defaultConfig {
-        applicationId = "com.iktiarnazib.lostandfoundv2"
+        applicationId = "com.android_ca3.lostandfoundv2"
         minSdk = 24
         targetSdk = 37
         versionCode = 1
